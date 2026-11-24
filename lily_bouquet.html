@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Букет лилий — облако точек</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,400;1,500&family=Marck+Script&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; background: #020203; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  /* ---------- надписи ---------- */
+  .cap { position: fixed; left: 0; right: 0; text-align: center; pointer-events: none; z-index: 2; }
+  #top { top: clamp(16px, 5.5vh, 60px); font-family: 'Marck Script', 'Segoe Script', 'Brush Script MT', cursive;
+         font-size: clamp(38px, 7vw, 88px); line-height: 1.1;
+         filter: drop-shadow(0 0 16px rgba(255,110,165,.5)) drop-shadow(0 0 40px rgba(255,90,150,.25)); }
+  #top span { display: inline-block; opacity: 0; padding: 0 .1em;
+         background: linear-gradient(100deg, #ffe3ec 0%, #ff9fc6 32%, #ffc9a3 66%, #fff1d9 100%);
+         -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .rule { display: block; width: min(260px, 44vw); height: 1px; margin: .35em auto 0; transform: scaleX(0); opacity: .9;
+         background: linear-gradient(90deg, transparent, #ff9fc6 30%, #ffd9a8 70%, transparent); }
+  #bot { bottom: clamp(18px, 5.5vh, 60px); padding: 0 7vw; font-family: 'Cormorant Garamond', 'Palatino Linotype', Georgia, serif;
+         font-style: italic; font-weight: 500; font-size: clamp(18px, 2.7vw, 34px); line-height: 1.5; letter-spacing: .01em; }
+  #bot .rule { margin: 0 auto .9em; }
+  #bot .l { display: block; opacity: 0; color: #f7e1e8;
+         text-shadow: 0 0 14px rgba(255,140,180,.45), 0 0 34px rgba(255,100,160,.2); }
+  #bot .l.b { color: #ffd6b8; }
+
+  .go #top span { animation: reveal 2.6s cubic-bezier(.2,.7,.2,1) 3.5s forwards; }
+  .go #top .rule { animation: draw 2.2s ease 4.6s forwards; }
+  .go #bot .rule { animation: draw 2.2s ease 4.3s forwards; }
+  .go #bot .l1 { animation: reveal 2.4s cubic-bezier(.2,.7,.2,1) 4.8s forwards; }
+  .go #bot .l2 { animation: reveal 2.4s cubic-bezier(.2,.7,.2,1) 6.6s forwards; }
+  @keyframes reveal { from { opacity: 0; filter: blur(12px); transform: translateY(12px); letter-spacing: .12em; }
+                      to   { opacity: 1; filter: blur(0);    transform: none; letter-spacing: inherit; } }
+  @keyframes draw   { to { transform: scaleX(1); } }
+
+  /* ---------- стартовый экран и звук ---------- */
+  #start { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center;
+         gap: 1.1em; background: radial-gradient(ellipse at 50% 45%, #1b0a14 0%, #020203 70%); cursor: pointer;
+         transition: opacity 1.4s ease, visibility 1.4s; font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; }
+  #start.hide { opacity: 0; visibility: hidden; pointer-events: none; }
+  #start .ring { width: 74px; height: 74px; border-radius: 50%; border: 1px solid rgba(255,170,205,.6);
+         display: grid; place-items: center; animation: pulse 2.6s ease-in-out infinite; }
+  #start .ring i { width: 0; height: 0; margin-left: 5px; border-left: 17px solid #ffc3da; border-top: 11px solid transparent; border-bottom: 11px solid transparent; }
+  #start p { margin: 0; color: #f3d3df; font-size: clamp(20px, 3vw, 28px); text-shadow: 0 0 16px rgba(255,120,170,.4); }
+  #start small { color: rgba(243,211,223,.55); font-size: clamp(14px, 2vw, 18px); }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,140,185,.35); } 50% { box-shadow: 0 0 0 18px rgba(255,140,185,0); } }
+  #snd { position: fixed; right: 16px; bottom: 16px; z-index: 3; width: 38px; height: 38px; border-radius: 50%;
+         border: 1px solid rgba(255,170,205,.35); background: rgba(10,4,8,.45); color: #f3d3df; font-size: 17px; cursor: pointer;
+         opacity: 0; transition: opacity 1s; }
+  .go #snd { opacity: .75; }
+  #snd:hover { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { #start .ring { animation: none; } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="cap" id="top"><span>Для моей Мери</span><i class="rule"></i></div>
+<div class="cap" id="bot">
+  <i class="rule"></i>
+  <span class="l l1">Я не умею дарить цветы так, чтобы они не завяли.</span>
+  <span class="l l2 b">Поэтому вырастил их из кода.</span>
+</div>
+
+<div id="start"><div class="ring"><i></i></div><p>Нажми, там для тебя сюрприз</p><small>включи звук</small></div>
+<button id="snd" aria-label="Звук вкл/выкл" title="Звук">♪</button>
+
+<script>
+(() => {
+'use strict';
+
+/* =====================================================================
+   Букет лилий из облака точек.
+   — рендер: z-buffer + ImageData (без сортировки, ~250k точек, 60 fps)
+   — у каждого цветка своя ось «куда смотрит»: к зрителю, вбок или вверх
+   — анимация роста стеблей, бутонов и раскрытия сохранена
+   Управление: мышь/палец — поворот камеры, двойной клик — повтор анимации
+   ===================================================================== */
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d', { alpha: false });
+const gA = document.createElement('canvas'), gAc = gA.getContext('2d');
+const gB = document.createElement('canvas'), gBc = gB.getContext('2d');
+
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const COARSE  = matchMedia('(pointer: coarse)').matches;
+const Q = (COARSE || innerWidth < 700)
+  ? { u: 34, v: 17, leafU: 36, leafV: 9,  stem: 1.25, anther: 40 }
+  : { u: 46, v: 25, leafU: 52, leafV: 13, stem: 0.9,  anther: 70 };
+
+/* ---------- утилиты ---------- */
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp  = (a, b, t) => a + (b - a) * t;
+const sstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+function mulberry32(a) {
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+const rand = mulberry32(7700172);
+const hash2 = (a, b, c) => { const h = Math.sin(a * 12.9898 + b * 78.233 + c * 37.719) * 43758.5453; return h - Math.floor(h); };
+const norm3 = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const dot   = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const dist3 = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
+
+/* ---------- мир: y вниз, камера в z = -camZ, «к зрителю» = -z ---------- */
+const LIGHT = norm3([-0.45, -0.6, -0.66]);
+const HALF  = norm3([LIGHT[0], LIGHT[1], LIGHT[2] - 1]);
+let LK = 1, LS = 0;
+function lightN(nx, ny, nz, amb) {
+  if (nz > 0) { nx = -nx; ny = -ny; nz = -nz; }          // двусторонний материал
+  const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+  const d = nx*LIGHT[0] + ny*LIGHT[1] + nz*LIGHT[2];
+  const diff = d > 0 ? d : 0;
+  const hd = nx*HALF[0] + ny*HALF[1] + nz*HALF[2];
+  LS = hd > 0 ? Math.pow(hd, 22) : 0;
+  LK = amb + 0.66 * (diff * 0.8 + 0.2 * (d * 0.5 + 0.5)) + 0.10 * (-nz);
+}
+
+/* ---------- палитры ---------- */
+const PAL = [
+  { throat:[110,18,48],  mid:[228,72,138],  edge:[255,195,222], vein:[150,24,74],  spot:[90,10,34]  }, // 0 малиновая
+  { throat:[85,10,14],   mid:[208,32,40],   edge:[252,135,118], vein:[120,14,20],  spot:[62,5,10]   }, // 1 алая
+  { throat:[125,88,12],  mid:[238,200,56],  edge:[255,246,170], vein:[176,128,22], spot:[112,62,10] }, // 2 жёлтая
+  { throat:[135,72,52],  mid:[234,170,140], edge:[255,236,220], vein:[180,106,82], spot:[116,48,35] }, // 3 персиковая
+  { throat:[145,42,72],  mid:[242,132,168], edge:[255,236,243], vein:[188,66,106], spot:[120,25,52] }, // 4 розовая, белый край
+  { throat:[62,6,16],    mid:[165,24,50],   edge:[232,100,122], vein:[92,10,26],   spot:[44,3,10]   }, // 5 рубиновая
+  { throat:[170,158,86], mid:[244,226,212], edge:[255,251,246], vein:[205,172,150],spot:[150,88,66]  }, // 6 кремово-белая
+  { throat:[150,40,8],   mid:[242,120,30],  edge:[255,196,112], vein:[176,62,12],  spot:[84,20,6]    }, // 7 оранжевая
+];
+const STAR = [176, 190, 72];
+
+/* ---------- хранилища точек ---------- */
+const ST = { x:[], y:[], z:[], r:[], g:[], b:[], d:[], f:[], w:[], s:[] };   // стебли и листья
+const FL = { cx:[], cy:[], cz:[], ox:[], oy:[], oz:[],
+             r0:[], g0:[], b0:[], r1:[], g1:[], b1:[], a:[], o:[], f:[], s:[] }; // цветки
+const c8 = v => v < 0 ? 0 : v > 255 ? 255 : (v + 0.5) | 0;
+function pushS(x, y, z, r, g, b, d, f, w, s) {
+  ST.x.push(x); ST.y.push(y); ST.z.push(z); ST.r.push(c8(r)); ST.g.push(c8(g)); ST.b.push(c8(b));
+  ST.d.push(d); ST.f.push(f); ST.w.push(w); ST.s.push(s);
+}
+function pushF(c, o, c0, c1, a, os, f, s) {
+  FL.cx.push(c[0]); FL.cy.push(c[1]); FL.cz.push(c[2]);
+  FL.ox.push(o[0]); FL.oy.push(o[1]); FL.oz.push(o[2]);
+  FL.r0.push(c8(c0[0])); FL.g0.push(c8(c0[1])); FL.b0.push(c8(c0[2]));
+  FL.r1.push(c8(c1[0])); FL.g1.push(c8(c1[1])); FL.b1.push(c8(c1[2]));
+  FL.a.push(a); FL.o.push(os); FL.f.push(f); FL.s.push(s);
+}
+const flowers = [];   // {ax,ay,az,dur,ph,amp}
+const swayDef = [];   // {ph,amp} для каждого fi (цветки + «виртуальные» для листвы)
+
+/* ---------- стебель (кубическая кривая Безье) ---------- */
+function bez(p0, p1, p2, p3, t, o) {
+  const it = 1 - t, a = it*it*it, b = 3*it*it*t, c = 3*it*t*t, d = t*t*t;
+  o[0] = a*p0[0] + b*p1[0] + c*p2[0] + d*p3[0];
+  o[1] = a*p0[1] + b*p1[1] + c*p2[1] + d*p3[1];
+  o[2] = a*p0[2] + b*p1[2] + c*p2[2] + d*p3[2];
+}
+function bezD(p0, p1, p2, p3, t, o) {
+  const it = 1 - t, a = 3*it*it, b = 6*it*t, c = 3*t*t;
+  for (let k = 0; k < 3; k++) o[k] = a*(p1[k]-p0[k]) + b*(p2[k]-p1[k]) + c*(p3[k]-p2[k]);
+}
+function createStem(fi, P, t0, dur) {
+  const [p0, p1, p2, p3] = P;
+  const tmp = [0, 0, 0];
+  const steps = Math.ceil((dist3(p0,p1) + dist3(p1,p2) + dist3(p2,p3)) * 0.92 / Q.stem);
+  const ring = 8;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    bez(p0, p1, p2, p3, t, tmp); const cx = tmp[0], cy = tmp[1], cz = tmp[2];
+    bezD(p0, p1, p2, p3, t, tmp);
+    const T = norm3(tmp);
+    const ref = Math.abs(T[0]) < 0.85 ? [1, 0, 0] : [0, 0, 1];
+    const B = norm3(cross(T, ref)), N = cross(B, T);
+    const rad = lerp(2.5, 1.45, t);
+    for (let k = 0; k < ring; k++) {
+      const a = k / ring * Math.PI * 2 + i * 0.45, ca = Math.cos(a), sa = Math.sin(a);
+      const dx = N[0]*ca + B[0]*sa, dy = N[1]*ca + B[1]*sa, dz = N[2]*ca + B[2]*sa;
+      lightN(dx, dy, dz, 0.5);
+      const kk = LK * (0.92 + 0.16 * rand());
+      pushS(cx + dx*rad, cy + dy*rad, cz + dz*rad,
+            lerp(34, 70, t)*kk + LS*40, lerp(78, 142, t)*kk + LS*50, lerp(24, 40, t)*kk + LS*30,
+            t0 + t * dur, fi, Math.pow(t, 1.6), 1.25);
+    }
+  }
+}
+
+/* ---------- лист лилии ---------- */
+function createLeaf(o) {
+  const { base, psi, el, len, width, dk, delay, fi, sw } = o;
+  const hx = Math.cos(psi), hz = Math.sin(psi), sx = -hz, sz = hx;
+  const ce = Math.cos(el), se = Math.sin(el);
+  const nU = Q.leafU, nV = Q.leafV;
+  for (let iu = 0; iu <= nU; iu++) {
+    const u = iu / nU;
+    const d = len * ce * u;
+    const rise = len * se * (u - dk * u * u);
+    const cx = base[0] + hx * d, cy = base[1] - rise, cz = base[2] + hz * d;
+    const tx = hx * len * ce, ty = -len * se * (1 - 2 * dk * u), tz = hz * len * ce;
+    const tl = Math.hypot(tx, ty, tz);
+    const Tx = tx/tl, Ty = ty/tl, Tz = tz/tl;
+    // «верхняя» нормаль = T × S, S = (sx,0,sz)
+    let nx = Ty * sz, ny = Tz * sx - Tx * sz, nz = -Ty * sx;
+    const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+    const wp = Math.pow(Math.max(0, Math.sin(Math.PI * Math.pow(u, 0.62))), 0.9);
+    const half = width * wp;
+    for (let iv = 0; iv < nV; iv++) {
+      let v = (iv + ((iu & 1) ? 0.5 : 0)) / (nV - 1) * 2 - 1; if (v > 1) v = 1;
+      const av = Math.abs(v);
+      const off = av * half * 0.38 * (1 - 0.4 * u);
+      const px = cx + sx * v * half + nx * off;
+      const py = cy + ny * off;
+      const pz = cz + sz * v * half + nz * off;
+      lightN(nx - sx * v * 0.8, ny, nz - sz * v * 0.8, 0.5);
+      const tc = Math.pow(u, 0.8);
+      let r = lerp(28, 84, tc), g = lerp(70, 158, tc), b = lerp(22, 52, tc);
+      const rib = Math.exp(-(v * v) / 0.006);
+      r = lerp(r, 160, rib * 0.55); g = lerp(g, 200, rib * 0.55); b = lerp(b, 96, rib * 0.55);
+      const vein = 0.9 + 0.1 * Math.cos(v * 24);
+      const kk = LK * vein * (0.92 + 0.16 * rand());
+      pushS(px, py, pz, r*kk + LS*35, g*kk + LS*45, b*kk + LS*25,
+            delay + (u * 0.22) , fi, sw + u * 0.35, 1.5);
+    }
+  }
+}
+
+/* ---------- кривая лепестка в плоскости (радиус, высота вдоль оси) ---------- */
+function wpAt(u) {
+  const grow = 0.18 + 0.82 * sstep(0, 0.5, u);
+  let tip = 1;
+  if (u > 0.42) { const x = (u - 0.42) / 0.58; tip = Math.pow(Math.max(0, 1 - Math.pow(x, 1.7)), 0.8); }
+  return grow * tip;
+}
+function makeCurve(U, len, mode, inner, open) {
+  const r = new Float32Array(U + 1), h = new Float32Array(U + 1);
+  const nr = new Float32Array(U + 1), nh = new Float32Array(U + 1), wp = new Float32Array(U + 1);
+  if (mode === 'open') {
+    const th0 = (inner ? 0.30 : 0.40) * (0.6 + 0.4 * open);
+    const a1 = (inner ? 0.42 : 0.52) * open, a2 = (inner ? 0.86 : 1.16) * open;
+    let rr = 0, hh = 0;
+    for (let i = 0; i <= U; i++) {
+      const u = i / U, th = th0 + a1 * u + a2 * Math.pow(u, 2.4);
+      if (i > 0) { rr += Math.sin(th) * len / U; hh += Math.cos(th) * len / U; }
+      r[i] = rr; h[i] = hh;
+    }
+  } else {
+    for (let i = 0; i <= U; i++) {
+      const u = i / U;
+      r[i] = len * (0.015 + (inner ? 0.13 : 0.185) * Math.sin(Math.PI * Math.pow(u, 0.85) * 0.97));
+      h[i] = len * 0.965 * u;
+    }
+  }
+  for (let i = 0; i <= U; i++) {
+    const a = Math.max(0, i - 1), b = Math.min(U, i + 1);
+    let dr = r[b] - r[a], dh = h[b] - h[a];
+    const l = Math.hypot(dr, dh) || 1; dr /= l; dh /= l;
+    nr[i] = -dh; nh[i] = dr;                     // внутренняя нормаль (к оси / к зрителю)
+    wp[i] = wpAt(i / U);
+  }
+  return { r, h, nr, nh, wp };
+}
+function surf(C, iu, v, wMax, wScale, curl, ruf, R, A, f, out) {
+  const w = v * wMax * wScale * C.wp[iu];
+  const off = curl * v * v * wMax * wScale * C.wp[iu] * 0.9 + ruf;
+  const rr = C.r[iu] + C.nr[iu] * off, hh = C.h[iu] + C.nh[iu] * off;
+  out[0] = f[0]*hh + R[0]*rr + A[0]*w;
+  out[1] = f[1]*hh + R[1]*rr + A[1]*w;
+  out[2] = f[2]*hh + R[2]*rr + A[2]*w;
+  const k = -v * curl * 1.6;
+  out[3] = R[0]*C.nr[iu] + f[0]*C.nh[iu] + A[0]*k;
+  out[4] = R[1]*C.nr[iu] + f[1]*C.nh[iu] + A[1]*k;
+  out[5] = R[2]*C.nr[iu] + f[2]*C.nh[iu] + A[2]*k;
+}
+
+/* ---------- цвет лепестка ---------- */
+const tmpC = [0, 0, 0];
+function petalBase(pal, u, v, rn, out) {
+  const av = Math.abs(v);
+  const t0 = sstep(0.02, 0.36, u);
+  let r = lerp(pal.throat[0], pal.mid[0], t0), g = lerp(pal.throat[1], pal.mid[1], t0), b = lerp(pal.throat[2], pal.mid[2], t0);
+  const t1 = clamp(sstep(0.50, 1.0, u) * 0.78 + av * av * 0.12, 0, 1);
+  r = lerp(r, pal.edge[0], t1); g = lerp(g, pal.edge[1], t1); b = lerp(b, pal.edge[2], t1);
+  const star = (1 - sstep(0.0, 0.17, u)) * (0.45 + 0.4 * (1 - av));      // жёлто-зелёная «звезда» зева
+  r = lerp(r, STAR[0], star); g = lerp(g, STAR[1], star); b = lerp(b, STAR[2], star);
+  const cv = Math.exp(-(v * v) / 0.0035) * sstep(0.04, 0.2, u) * (1 - sstep(0.78, 0.98, u));
+  const sv = Math.exp(-((av - 0.45) * (av - 0.45)) / 0.004) * sstep(0.15, 0.3, u) * (1 - sstep(0.7, 0.9, u)) * 0.55;
+  const vk = clamp(cv * 0.8 + sv, 0, 0.85);
+  r = lerp(r, pal.vein[0], vk); g = lerp(g, pal.vein[1], vk); b = lerp(b, pal.vein[2], vk);
+  const dens = 0.20 * (1 - sstep(0.12, 0.62, u)) * sstep(0.04, 0.14, u) * (1 - av * 0.7);   // папиллы
+  if (rn < dens) { r = lerp(r, pal.spot[0], 0.92); g = lerp(g, pal.spot[1], 0.92); b = lerp(b, pal.spot[2], 0.92); }
+  out[0] = r; out[1] = g; out[2] = b;
+}
+
+/* ---------- цветок ---------- */
+function createLily(fi, o) {
+  const pal = PAL[o.pal], s = o.scale;
+  const f = norm3(o.face);
+  const ref = Math.abs(f[1]) > 0.9 ? [0, 0, -1] : [0, -1, 0];
+  const rd = dot(ref, f);
+  const e1 = norm3([ref[0] - f[0]*rd, ref[1] - f[1]*rd, ref[2] - f[2]*rd]);
+  const e2 = cross(f, e1);
+  const U = Q.u, V = Q.v;
+  const lenBase = 51 * s;
+  const out1 = [0,0,0,0,0,0], out2 = [0,0,0,0,0,0];
+  const c0 = [0,0,0], c1 = [0,0,0];
+  flowers[fi] = { ax: o.pos[0], ay: o.pos[1], az: o.pos[2], dur: o.dur };
+
+  for (let p = 0; p < 6; p++) {
+    const inner = p & 1;
+    const phi = p / 6 * Math.PI * 2 + o.roll + (rand() - 0.5) * 0.08;
+    const cp = Math.cos(phi), sp = Math.sin(phi);
+    const R = [e1[0]*cp + e2[0]*sp, e1[1]*cp + e2[1]*sp, e1[2]*cp + e2[2]*sp];
+    const A = [-e1[0]*sp + e2[0]*cp, -e1[1]*sp + e2[1]*cp, -e1[2]*sp + e2[2]*cp];
+    const len  = lenBase * (inner ? 0.95 : 1) * (0.96 + rand() * 0.08);
+    const maxW = (inner ? 17.5 : 14.8) * s * (0.96 + rand() * 0.08);
+    const opn  = o.open * (0.93 + rand() * 0.14);
+    const CO = makeCurve(U, len, 'open', inner, opn);
+    const CC = makeCurve(U, len, 'closed', inner, 0);
+    const pDelay = (rand() - 0.5) * 0.14;
+
+    for (let iu = 0; iu <= U; iu++) {
+      const u = iu / U;
+      const curlO = lerp(0.46, -0.10, sstep(0.30, 1.0, u));
+      for (let iv = 0; iv < V; iv++) {
+        let v = (iv + ((iu & 1) ? 0.5 : 0) + (rand() - 0.5) * 0.5) / (V - 1) * 2 - 1;
+        v = clamp(v, -1, 1);
+        const av = Math.abs(v);
+        const ruf = Math.sin(u * Math.PI * (5 + inner * 1.5) + p * 1.7) * 1.05 * s * u * u * av * av * av;
+        surf(CO, iu, v, maxW, 1.0,  curlO, ruf, R, A, f, out1);   // раскрытый
+        surf(CC, iu, v, maxW, 0.8,  0.55,  0,   R, A, f, out2);   // бутон
+
+        const rn = hash2(iu, iv, p);
+        petalBase(pal, u, v, rn, tmpC);
+        const noise = 0.94 + 0.12 * rand();
+        const glint = rand() < 0.02 ? 1.22 : 1;
+        // внутренняя сторона (раскрытый)
+        lightN(out1[3], out1[4], out1[5], 0.36);
+        const ao = lerp(0.42, 1.0, sstep(0, 0.38, u));
+        let k = LK * ao * noise * glint;
+        c1[0] = tmpC[0]*k + LS*30; c1[1] = tmpC[1]*k + LS*30; c1[2] = tmpC[2]*k + LS*30;
+        // внешняя сторона (бутон): светлее, к кончику зеленоватая
+        lightN(out2[3], out2[4], out2[5], 0.4);
+        const gt = sstep(0.55, 1, u) * (inner ? 0.15 : 0.5);
+        const br = lerp(lerp(pal.mid[0], pal.edge[0], 0.35 + 0.3*u), 120, gt);
+        const bg = lerp(lerp(pal.mid[1], pal.edge[1], 0.35 + 0.3*u), 156, gt);
+        const bb = lerp(lerp(pal.mid[2], pal.edge[2], 0.35 + 0.3*u), 64,  gt);
+        k = LK * (0.8 + 0.2*u) * noise;
+        c0[0] = br*k + LS*26; c0[1] = bg*k + LS*26; c0[2] = bb*k + LS*26;
+
+        pushF(out2, out1, c0, c1,
+              o.bloom - 0.45 + u * 0.25,
+              o.bloom + u * 0.18 + pDelay, fi,
+              rn < 0.12 && u < 0.6 ? 1.95 : 1.85);
+      }
+    }
+  }
+
+  /* --- тычинки и пестик --- */
+  const L = lenBase;
+  const pollenC = [[214,120,38], [122,40,26]];
+  for (let k = 0; k < 6; k++) {
+    const a = k / 6 * Math.PI * 2 + 0.35 + o.roll;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const R = [e1[0]*ca + e2[0]*sa, e1[1]*ca + e2[1]*sa, e1[2]*ca + e2[2]*sa];
+    const A = [-e1[0]*sa + e2[0]*ca, -e1[1]*sa + e2[1]*ca, -e1[2]*sa + e2[2]*ca];
+    const N = 14;
+    const place = (r, h) => [f[0]*h + R[0]*r, f[1]*h + R[1]*r, f[2]*h + R[2]*r];
+    let opT, clT;
+    for (let j = 0; j <= N; j++) {
+      const t = j / N;
+      const op = place(L * (0.04 + 0.36 * Math.pow(t, 1.35) * o.open), L * (0.70 * t - 0.14 * t*t*t));
+      const cl = place(L * 0.03 * t, L * 0.62 * t);
+      for (let m = 0; m < 2; m++) {
+        const jit = (m - 0.5) * 0.6;
+        pushF([cl[0]+A[0]*jit, cl[1]+A[1]*jit, cl[2]+A[2]*jit], [op[0]+A[0]*jit, op[1]+A[1]*jit, op[2]+A[2]*jit],
+              [205,222,160], [220,232,176], o.bloom - 0.2, o.bloom + 0.15, fi, 1.1);
+      }
+      if (j === N) { opT = op; clT = cl; }
+    }
+    // пыльник
+    const axO = norm3([A[0]*0.85 + R[0]*0.35 - f[0]*0.1, A[1]*0.85 + R[1]*0.35 - f[1]*0.1, A[2]*0.85 + R[2]*0.35 - f[2]*0.1]);
+    const axC = f;
+    const pO1 = norm3(cross(axO, f)), pO2 = cross(axO, pO1);
+    const pC1 = norm3(cross(axC, R)), pC2 = cross(axC, pC1);
+    for (let m = 0; m < Q.anther; m++) {
+      const t = rand() * 2 - 1, q = rand() * Math.PI * 2;
+      const rad = Math.sqrt(rand()) * Math.sqrt(1 - t*t) * 1.5 * s + 0.4 * s;
+      const hO = 4.6 * s, hC = 3.8 * s;
+      const cq = Math.cos(q) * rad, sq = Math.sin(q) * rad;
+      const po = [opT[0] + axO[0]*t*hO + pO1[0]*cq + pO2[0]*sq, opT[1] + axO[1]*t*hO + pO1[1]*cq + pO2[1]*sq, opT[2] + axO[2]*t*hO + pO1[2]*cq + pO2[2]*sq];
+      const pc = [clT[0] + axC[0]*t*hC + pC1[0]*cq + pC2[0]*sq, clT[1] + axC[1]*t*hC + pC1[1]*cq + pC2[1]*sq, clT[2] + axC[2]*t*hC + pC1[2]*cq + pC2[2]*sq];
+      const pc0 = rand() < 0.42 ? pollenC[0] : pollenC[1];
+      const kk = 0.8 + 0.45 * rand();
+      const col = [pc0[0]*kk, pc0[1]*kk, pc0[2]*kk];
+      pushF(pc, po, col, col, o.bloom, o.bloom + 0.2, fi, 1.4);
+    }
+  }
+  // пестик
+  for (let j = 0; j <= 18; j++) {
+    const t = j / 18;
+    const op = [f[0]*L*0.80*t + e1[0]*L*0.12*t*t, f[1]*L*0.80*t + e1[1]*L*0.12*t*t, f[2]*L*0.80*t + e1[2]*L*0.12*t*t];
+    const cl = [f[0]*L*0.66*t, f[1]*L*0.66*t, f[2]*L*0.66*t];
+    pushF(cl, op, [190,210,130], [205,225,140], o.bloom - 0.2, o.bloom + 0.1, fi, 1.25);
+  }
+  {
+    const tO = [f[0]*L*0.80 + e1[0]*L*0.12, f[1]*L*0.80 + e1[1]*L*0.12, f[2]*L*0.80 + e1[2]*L*0.12];
+    const tC = [f[0]*L*0.66, f[1]*L*0.66, f[2]*L*0.66];
+    for (let m = 0; m < 44; m++) {
+      const a = rand() * Math.PI * 2, rr = Math.sqrt(rand()) * 2.2 * s, hh = (rand() - 0.5) * 3 * s;
+      const off = [e1[0]*Math.cos(a)*rr + e2[0]*Math.sin(a)*rr + f[0]*hh,
+                   e1[1]*Math.cos(a)*rr + e2[1]*Math.sin(a)*rr + f[1]*hh,
+                   e1[2]*Math.cos(a)*rr + e2[2]*Math.sin(a)*rr + f[2]*hh];
+      const col = rand() < 0.5 ? [196,216,112] : [232,242,170];
+      pushF([tC[0]+off[0], tC[1]+off[1], tC[2]+off[2]], [tO[0]+off[0], tO[1]+off[1], tO[2]+off[2]],
+            col, col, o.bloom - 0.2, o.bloom + 0.1, fi, 1.35);
+    }
+  }
+}
+
+/* =====================================================================
+   КОМПОЗИЦИЯ. Каждый цветок: pos — где сидит голова, face — КУДА СМОТРИТ.
+   (0,0,-1) — прямо на зрителя, (±1,0,0) — вбок, (0,-1,0) — вверх.
+   ===================================================================== */
+const BOUQUET = [
+  // центр, лицом к зрителю
+  { pos:[ -6, -34, -64], face:[-0.12,-0.12,-1  ], s:1.28, pal:0, open:1.05, roll:0.2, t0:0.12, bloom:2.15 },
+  { pos:[ 54,   4, -52], face:[ 0.28,-0.05,-1  ], s:1.18, pal:6, open:1.05, roll:0.9, t0:0.18, bloom:2.25 },
+  { pos:[-60,  22, -46], face:[-0.32, 0.02,-1  ], s:1.14, pal:2, open:1.02, roll:0.5, t0:0.20, bloom:2.30 },
+  { pos:[  6,  56, -44], face:[ 0.00, 0.20,-1  ], s:1.14, pal:3, open:1.05, roll:1.4, t0:0.24, bloom:2.40 },
+  // верх и верх-бока, чуть вверх и в сторону
+  { pos:[-66, -78, -30], face:[-0.62,-0.42,-0.66], s:1.02, pal:5, open:1.00, roll:0.3, t0:0.15, bloom:2.10 },
+  { pos:[ 68, -66, -26], face:[ 0.62,-0.38,-0.68], s:1.04, pal:4, open:1.02, roll:1.1, t0:0.10, bloom:2.05 },
+  { pos:[  2,-122, -14], face:[ 0.04,-0.88,-0.48], s:1.04, pal:1, open:1.00, roll:0.6, t0:0.05, bloom:1.95 },
+  { pos:[-32,-104,   4], face:[-0.45,-0.82,-0.35], s:0.90, pal:2, open:1.00, roll:0.2, t0:0.20, bloom:2.30 },
+  { pos:[ 42,-106,   6], face:[ 0.50,-0.80,-0.30], s:0.90, pal:3, open:0.98, roll:0.8, t0:0.22, bloom:2.35 },
+  // прямо вбок
+  { pos:[-100,-16, -14], face:[-0.95,-0.08,-0.30], s:0.98, pal:7, open:1.00, roll:0.4, t0:0.26, bloom:2.35 },
+  { pos:[ 102,-18, -12], face:[ 0.95,-0.02,-0.32], s:0.98, pal:6, open:1.00, roll:1.2, t0:0.28, bloom:2.40 },
+  { pos:[-102, 44, -18], face:[-0.82, 0.22,-0.52], s:1.00, pal:0, open:1.00, roll:0.7, t0:0.30, bloom:2.50 },
+  { pos:[ 100, 48, -20], face:[ 0.85, 0.12,-0.50], s:1.00, pal:5, open:1.00, roll:0.1, t0:0.32, bloom:2.55 },
+  // заполнение глубины
+  { pos:[ 24, -82,  22], face:[ 0.20,-0.30,-1  ], s:1.10, pal:4, open:1.00, roll:0.5, t0:0.16, bloom:2.20 },
+  { pos:[-92, -52, -24], face:[-0.80,-0.30,-0.60], s:0.95, pal:1, open:1.00, roll:0.6, t0:0.17, bloom:2.20 },
+  { pos:[ 94, -56, -22], face:[ 0.80,-0.25,-0.60], s:0.95, pal:2, open:1.00, roll:1.0, t0:0.19, bloom:2.28 },
+  { pos:[-14, -90, -34], face:[-0.10,-0.50,-1  ], s:0.95, pal:7, open:1.00, roll:0.3, t0:0.13, bloom:2.15 },
+  // бутоны / полураскрытые
+  { pos:[-80,-118,   8], face:[-0.55,-0.75,-0.30], s:0.85, pal:4, open:0.30, roll:0.3, t0:0.10, bloom:2.20 },
+  { pos:[ 84,-104,  10], face:[ 0.60,-0.70,-0.30], s:0.82, pal:1, open:0.38, roll:0.9, t0:0.14, bloom:2.25 },
+  { pos:[  6,-158,   0], face:[ 0.00,-1.00,-0.15], s:0.80, pal:2, open:0.14, roll:0.0, t0:0.06, bloom:2.40 },
+];
+
+const BASE_Y = 175, STEM_DUR = 1.4;
+BOUQUET.forEach((b, fi) => {
+  b.dur = 1.45 + rand() * 0.3;
+  swayDef[fi] = { ph: rand() * 6.28, amp: 1.8 + rand() * 0.8 };
+  const base = [b.pos[0] * 0.10 + (rand() - 0.5) * 8, BASE_Y, b.pos[2] * 0.10 + (rand() - 0.5) * 8];
+  const f = norm3(b.face);
+  const tan = norm3([f[0] * 0.75, f[1] * 0.75 - 0.25, f[2] * 0.75]);           // стебель входит в цветок вдоль оси
+  const L = 55 + 12 * (b.s - 1);
+  const p3 = b.pos.slice();
+  const p2 = [p3[0] - tan[0] * L, p3[1] - tan[1] * L, p3[2] - tan[2] * L];
+  const p1 = [base[0] + (p2[0] - base[0]) * 0.15, base[1] - 0.55 * (base[1] - p2[1]), base[2] + (p2[2] - base[2]) * 0.15];
+  const P = [base, p1, p2, p3];
+
+  createStem(fi, P, b.t0, STEM_DUR);
+  createLily(fi, { pos: p3, face: b.face, roll: b.roll, scale: b.s, pal: b.pal, open: b.open, bloom: b.bloom, dur: b.dur });
+
+  // листья на нижней части стебля
+  const nL = fi < 7 ? 4 : 3, tmp = [0, 0, 0];
+  const out = Math.atan2(b.pos[2], b.pos[0]);
+  for (let l = 0; l < nL; l++) {
+    const lt = lerp(0.08, 0.5, (l + rand() * 0.6) / nL);
+    bez(P[0], P[1], P[2], P[3], lt, tmp);
+    createLeaf({
+      base: tmp.slice(), psi: out + (rand() - 0.5) * 1.5 + (l % 2 ? 0.5 : -0.5),
+      el: 0.75 + rand() * 0.4, len: lerp(92, 58, lt) * (0.9 + rand() * 0.2), width: 6.5 + rand() * 2,
+      dk: 0.42 + rand() * 0.3, delay: b.t0 + lt * STEM_DUR, fi, sw: Math.pow(lt, 1.6) * 0.9
+    });
+  }
+});
+
+// пышное основание: дополнительные листья-«клинки» от общего пучка
+const NB = BOUQUET.length;
+for (let k = 0; k < 4; k++) swayDef[NB + k] = { ph: rand() * 6.28, amp: 1.0 + rand() * 0.6 };
+for (let k = 0; k < 30; k++) {
+  const front = rand() < 0.78;
+  const psi = front ? -Math.PI * rand() : Math.PI * rand();
+  createLeaf({
+    base: [(rand() - 0.5) * 14, BASE_Y + rand() * 4, (rand() - 0.5) * 12], psi,
+    el: 0.9 + rand() * 0.45, len: front ? 70 + rand() * 55 : 90 + rand() * 50, width: 6.5 + rand() * 3,
+    dk: 0.36 + rand() * 0.28, delay: 0.05 + rand() * 0.55, fi: NB + (k & 3), sw: 0.15
+  });
+}
+
+/* ---------- в типизированные массивы ---------- */
+const nS = ST.x.length, nF = FL.cx.length;
+const S_x = Float32Array.from(ST.x), S_y = Float32Array.from(ST.y), S_z = Float32Array.from(ST.z);
+const S_r = Uint8Array.from(ST.r), S_g = Uint8Array.from(ST.g), S_b = Uint8Array.from(ST.b);
+const S_d = Float32Array.from(ST.d), S_w = Float32Array.from(ST.w), S_s = Float32Array.from(ST.s);
+const S_f = Uint8Array.from(ST.f);
+const F_cx = Float32Array.from(FL.cx), F_cy = Float32Array.from(FL.cy), F_cz = Float32Array.from(FL.cz);
+const F_ox = Float32Array.from(FL.ox), F_oy = Float32Array.from(FL.oy), F_oz = Float32Array.from(FL.oz);
+const F_r0 = Uint8Array.from(FL.r0), F_g0 = Uint8Array.from(FL.g0), F_b0 = Uint8Array.from(FL.b0);
+const F_r1 = Uint8Array.from(FL.r1), F_g1 = Uint8Array.from(FL.g1), F_b1 = Uint8Array.from(FL.b1);
+const F_a = Float32Array.from(FL.a), F_o = Float32Array.from(FL.o), F_s = Float32Array.from(FL.s);
+const F_f = Uint8Array.from(FL.f);
+const NSW = NB + 4;
+const fAx = new Float32Array(NB), fAy = new Float32Array(NB), fAz = new Float32Array(NB), fDur = new Float32Array(NB);
+flowers.forEach((f, i) => { fAx[i] = f.ax; fAy[i] = f.ay; fAz[i] = f.az; fDur[i] = f.dur; });
+const sdx = new Float32Array(NSW), sdz = new Float32Array(NSW), fBreath = new Float32Array(NB);
+
+/* ---------- фон, звёзды, пылинки ---------- */
+const stars = Array.from({ length: 520 }, () => ({
+  x: rand(), y: rand(), par: 0.1 + rand() * 0.5, a: 0.18 + rand() * 0.5, sp: 0.6 + rand() * 1.8, ph: rand() * 6.28, big: rand() < 0.12
+}));
+const motes = Array.from({ length: 110 }, () => ({
+  x: (rand() - 0.5) * 300, y: rand() * 440 - 240, z: (rand() - 0.5) * 200 - 20,
+  v: 5 + rand() * 12, ph: rand() * 6.28, c: rand() < 0.5 ? [255, 196, 150] : [255, 150, 200]
+}));
+
+let W, H, Wb, Hb, RS, buf32, zbuf, img, bg32;
+function resize() {
+  W = innerWidth; H = innerHeight;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  let rs = dpr; const MAXPIX = 2.3e6;
+  if (W * H * rs * rs > MAXPIX) rs = Math.sqrt(MAXPIX / (W * H));
+  RS = rs; Wb = Math.max(2, Math.round(W * rs)); Hb = Math.max(2, Math.round(H * rs));
+  canvas.width = Wb; canvas.height = Hb;
+  buf32 = new Uint32Array(Wb * Hb); zbuf = new Float32Array(Wb * Hb);
+  img = new ImageData(new Uint8ClampedArray(buf32.buffer), Wb, Hb);
+  gA.width = Math.max(2, Wb / 5 | 0); gA.height = Math.max(2, Hb / 5 | 0);
+  gB.width = Math.max(2, Wb / 16 | 0); gB.height = Math.max(2, Hb / 16 | 0);
+  bg32 = new Uint32Array(Wb * Hb);
+  const cx = Wb * 0.5, cy = Hb * 0.52, R = Math.min(Hb * 0.55, Wb * 0.7);
+  for (let y = 0; y < Hb; y++) {
+    const dy = (y - cy) / R, vy = (y - cy) / (Hb * 0.75);
+    for (let x = 0; x < Wb; x++) {
+      const dx = (x - cx) / R, vx = (x - cx) / (Wb * 0.75);
+      const glow = Math.exp(-(dx * dx + dy * dy) * 1.9);
+      const vig = 1 - 0.55 * Math.min(1, vx * vx + vy * vy);
+      const n = (((x * 73856093) ^ (y * 19349663)) & 255) / 255 - 0.5;
+      const r = (3 + 26 * glow) * vig + n, g = (3 + 8 * glow) * vig + n, b = (5 + 20 * glow) * vig + n;
+      bg32[y * Wb + x] = 0xff000000 | (c8(b) << 16) | (c8(g) << 8) | c8(r);
+    }
+  }
+}
+addEventListener('resize', resize);
+resize();
+
+/* ---------- ввод ---------- */
+let ptrX = 0, ptrY = 0, lastMove = -1e9;
+addEventListener('pointermove', e => { ptrX = e.clientX / W - 0.5; ptrY = e.clientY / H - 0.5; lastMove = performance.now(); });
+/* ---------- музыка и старт ---------- */
+const AUDIO_SRC = 'song.mp3';   // положите mp3 рядом с этим файлом (или укажите свою ссылку)
+const audio = new Audio();
+audio.src = AUDIO_SRC; audio.loop = true; audio.preload = 'auto'; audio.volume = 0;
+audio.addEventListener('error', () => console.warn('Не найден аудиофайл: ' + AUDIO_SRC));
+function fadeIn() {
+  let v = audio.volume; const id = setInterval(() => { v = Math.min(0.9, v + 0.03); audio.volume = v; if (v >= 0.9) clearInterval(id); }, 100);
+}
+let started = false, tStart = 0;
+const startEl = document.getElementById('start'), sndBtn = document.getElementById('snd');
+function restartCaptions() {
+  document.body.classList.remove('go'); void document.body.offsetWidth; document.body.classList.add('go');
+}
+function start() {
+  if (started) return;
+  started = true; tStart = performance.now();
+  startEl.classList.add('hide'); restartCaptions();
+  const pr = audio.play(); if (pr && pr.then) pr.then(fadeIn).catch(() => {});
+}
+startEl.addEventListener('click', start);
+sndBtn.addEventListener('click', () => { audio.muted = !audio.muted; sndBtn.textContent = audio.muted ? '×' : '♪'; });
+const replay = () => { if (!started) return; tStart = performance.now(); restartCaptions(); };
+addEventListener('dblclick', replay);
+addEventListener('keydown', e => { if (e.key === 'r' || e.key === 'R' || e.key === 'к' || e.key === 'К') replay(); });
+
+/* ---------- сплат точки в z-буфер ---------- */
+function splat(px, py, n, z, col) {
+  let x0 = Math.round(px - n * 0.5), y0 = Math.round(py - n * 0.5);
+  let x1 = x0 + n, y1 = y0 + n;
+  if (x1 <= 0 || y1 <= 0 || x0 >= Wb || y0 >= Hb) return;
+  if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0; if (x1 > Wb) x1 = Wb; if (y1 > Hb) y1 = Hb;
+  for (let y = y0; y < y1; y++) {
+    let idx = y * Wb + x0;
+    for (let x = x0; x < x1; x++, idx++) {
+      if (z < zbuf[idx]) { zbuf[idx] = z; buf32[idx] = col; }
+    }
+  }
+}
+const packC = (r, g, b) => 0xff000000 | (b << 16) | (g << 8) | r;
+
+/* ---------- кадр ---------- */
+let last = performance.now(), camYaw = 0, camPitch = 0, stride = 1, emaDt = 16, frames = 0;
+const camZ = 470;
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const el = started ? (now - tStart) / 1000 : -1;
+
+  // адаптивное качество
+  emaDt = emaDt * 0.95 + dt * 1000 * 0.05; frames++;
+  if (frames > 90 && frames % 60 === 0 && emaDt > 24 && stride < 3) { stride++; emaDt = 16; }
+
+  // камера
+  const active = now - lastMove < 2500;
+  const autoYaw = REDUCED ? 0 : Math.sin(el * 0.45) * 0.20;
+  const tYaw = active ? ptrX * 1.0 : autoYaw;
+  const tPitch = active ? ptrY * 0.22 : (REDUCED ? 0 : Math.cos(el * 0.38) * 0.035);
+  const k = 1 - Math.exp(-dt * 3);
+  camYaw += (tYaw - camYaw) * k; camPitch += (tPitch - camPitch) * k;
+  const cY = Math.cos(camYaw), sY = Math.sin(camYaw), cX = Math.cos(camPitch), sX = Math.sin(camPitch);
+
+  const fov = Math.min(H * 0.98, W * 1.45) * 0.82 * RS;
+  const cxB = Wb * 0.5, cyB = Hb * 0.5;
+  const swAmp = REDUCED ? 0.25 : 1;
+
+  buf32.set(bg32); zbuf.fill(1e9);
+
+  // звёзды
+  const sd = RS > 1.3 ? 2 : 1;
+  for (let i = 0; i < stars.length; i++) {
+    const s = stars[i];
+    const tw = 0.55 + 0.45 * Math.sin(el * s.sp + s.ph);
+    let x = ((s.x + camYaw * s.par * 0.25) % 1 + 1) % 1;
+    const px = (x * Wb) | 0, py = (s.y * Hb) | 0, a = s.a * tw;
+    const c = packC(c8(200 * a + 4), c8(212 * a + 4), c8(232 * a + 6));
+    const n = s.big ? sd + 1 : sd;
+    for (let yy = 0; yy < n && py + yy < Hb; yy++) for (let xx = 0; xx < n && px + xx < Wb; xx++) buf32[(py + yy) * Wb + px + xx] = c;
+  }
+
+  // качание
+  for (let i = 0; i < NSW; i++) {
+    const d = swayDef[i];
+    sdx[i] = Math.sin(el * 1.15 + d.ph) * d.amp * swAmp;
+    sdz[i] = Math.cos(el * 0.88 + d.ph * 1.3) * d.amp * 0.8 * swAmp;
+    if (i < NB) fBreath[i] = 0.02 * Math.sin(el * 0.9 + d.ph * 2.1);
+  }
+  const szK = stride > 1 ? Math.sqrt(stride) * 0.92 : 1;
+
+  // 1. стебли и листья
+  for (let i = 0; i < nS; i += stride) {
+    const dl = S_d[i]; if (el < dl) continue;
+    let a = (el - dl) * 4; if (a > 1) a = 1; const app = a * a * (3 - 2 * a);
+    const fi = S_f[i], sw = S_w[i];
+    const x0 = S_x[i] + sdx[fi] * sw, y0 = S_y[i] + (1 - app) * 8, z0 = S_z[i] + sdz[fi] * sw;
+    const x1 = x0 * cY + z0 * sY, z1 = -x0 * sY + z0 * cY;
+    const y1 = y0 * cX - z1 * sX, z2 = y0 * sX + z1 * cX;
+    const depth = z2 + camZ; if (depth < 30) continue;
+    const sc = fov / depth;
+    const fog = clamp(1.12 - (z2 + 80) * 0.0028, 0.6, 1.15);
+    const n = Math.max(1, ((S_s[i] * szK * sc * (0.4 + 0.6 * app)) + 0.5) | 0);
+    splat(cxB + x1 * sc, cyB + y1 * sc, n, z2,
+          packC(c8(S_r[i] * fog), c8(S_g[i] * fog), c8(S_b[i] * fog)));
+  }
+
+  // 2. цветки: бутон → раскрытие
+  for (let i = 0; i < nF; i += stride) {
+    const ap = F_a[i]; if (el < ap) continue;
+    let a = (el - ap) * 2.857; if (a > 1) a = 1; const app = a * a * (3 - 2 * a);
+    const fi = F_f[i];
+    let t = (el - F_o[i]) / fDur[fi], ot;
+    if (t <= 0) ot = 0;
+    else if (t >= 1) ot = 1 + fBreath[fi];
+    else { const p = t * t * (3 - 2 * t), q = p - 1; ot = 1 + 2.1 * q * q * q + 1.1 * q * q + fBreath[fi] * t; }   // лёгкий «перелёт»
+    const lx = F_cx[i] + (F_ox[i] - F_cx[i]) * ot;
+    const ly = F_cy[i] + (F_oy[i] - F_cy[i]) * ot;
+    const lz = F_cz[i] + (F_oz[i] - F_cz[i]) * ot;
+    const x0 = fAx[fi] + lx * app + sdx[fi], y0 = fAy[fi] + ly * app, z0 = fAz[fi] + lz * app + sdz[fi];
+    const x1 = x0 * cY + z0 * sY, z1 = -x0 * sY + z0 * cY;
+    const y1 = y0 * cX - z1 * sX, z2 = y0 * sX + z1 * cX;
+    const depth = z2 + camZ; if (depth < 30) continue;
+    const sc = fov / depth;
+    const fog = clamp(1.12 - (z2 + 80) * 0.0028, 0.6, 1.15);
+    const oc = ot < 0 ? 0 : ot > 1 ? 1 : ot;
+    const r = (F_r0[i] + (F_r1[i] - F_r0[i]) * oc) * fog;
+    const g = (F_g0[i] + (F_g1[i] - F_g0[i]) * oc) * fog;
+    const b = (F_b0[i] + (F_b1[i] - F_b0[i]) * oc) * fog;
+    const n = Math.max(1, ((F_s[i] * szK * sc * (0.55 + 0.45 * app)) + 0.5) | 0);
+    splat(cxB + x1 * sc, cyB + y1 * sc, n, z2, packC(c8(r), c8(g), c8(b)));
+  }
+
+  // 3. искры-пылинки после раскрытия
+  const mAlpha = sstep(3.2, 5.2, el);
+  if (mAlpha > 0 && !REDUCED) {
+    for (let i = 0; i < motes.length; i++) {
+      const m = motes[i];
+      m.y -= m.v * dt; if (m.y < -250) m.y = 200;
+      const tw = 0.4 + 0.6 * Math.abs(Math.sin(el * 1.3 + m.ph)), al = mAlpha * tw;
+      const x0 = m.x + Math.sin(el * 0.6 + m.ph) * 6, y0 = m.y, z0 = m.z;
+      const x1 = x0 * cY + z0 * sY, z1 = -x0 * sY + z0 * cY;
+      const y1 = y0 * cX - z1 * sX, z2 = y0 * sX + z1 * cX;
+      const depth = z2 + camZ, sc = fov / depth;
+      splat(cxB + x1 * sc, cyB + y1 * sc, Math.max(1, (1.1 * sc + 0.5) | 0), z2,
+            packC(c8(m.c[0] * al), c8(m.c[1] * al), c8(m.c[2] * al)));
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+
+  // мягкое свечение (bloom)
+  gAc.drawImage(canvas, 0, 0, gA.width, gA.height);
+  gBc.drawImage(gA, 0, 0, gB.width, gB.height);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.38; ctx.drawImage(gB, 0, 0, Wb, Hb);
+  ctx.globalAlpha = 0.18; ctx.drawImage(gA, 0, 0, Wb, Hb);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
